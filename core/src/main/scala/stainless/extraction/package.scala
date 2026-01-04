@@ -130,6 +130,7 @@ package object extraction {
     extends Exception(msg)
 
   def pipeline(using inox.Context): StainlessPipeline = {
+    utils.NamedPipeline("CT", ct.Instrumentation(xlang.trees, xlang.trees)) `andThen`
     xlang.extractor        `andThen`
     innerclasses.extractor `andThen`
     methods.extractor      `andThen`
