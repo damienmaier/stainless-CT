@@ -24,6 +24,7 @@ package stainless
 package object extraction {
 
   val phases: Seq[(String, String)] = Seq(
+    "Lockstep"                  -> "Adds instrumentation for lockstep execution",
     "UserFiltering"             -> "Remove all the library functions not used by the user",
     "Preprocessing"             -> "A preprocessing phase before the pipeline",
     "PartialFunctions"          -> "Lift partial function preconditions",
@@ -130,7 +131,7 @@ package object extraction {
     extends Exception(msg)
 
   def pipeline(using inox.Context): StainlessPipeline = {
-    utils.NamedPipeline("CT", ct.Instrumentation(xlang.trees, xlang.trees)) `andThen`
+    utils.NamedPipeline("Lockstep", ct.Instrumentation(xlang.trees, xlang.trees)) `andThen`
     xlang.extractor        `andThen`
     innerclasses.extractor `andThen`
     methods.extractor      `andThen`
