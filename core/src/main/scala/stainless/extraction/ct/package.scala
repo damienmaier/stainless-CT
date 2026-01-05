@@ -63,6 +63,38 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
                     None,
                     newIfExpr
                 )
+
+            case s.MatchExpr(scrutinee, cases) =>
+
+                val lockstepMatchCases = cases.map(matchCase =>
+                    matchCase.copy(
+                        rhs = lockstepExpression(matchCase.rhs, idToShadowId)
+                    )
+                )
+
+                val newMatchExpr = s.MatchExpr(scrutinee, lockstepMatchCases)
+
+                def buildExecutionPathCase(originalCase: s.MatchCase, pathIndex: Int): s.MatchCase =
+                    originalCase.copy(rhs=s.IntegerLiteral(pathIndex))
+                val executionPathMatchCases = cases.zipWithIndex.map(buildExecutionPathCase)
+
+                val executionPathMatchExpression = s.MatchExpr(
+                    scrutinee,
+                    executionPathMatchCases
+                )
+                val shadowExecutionPathMatchExpression = s.MatchExpr(
+                    shadowExpression(scrutinee, idToShadowId),
+                    executionPathMatchCases
+                )
+
+                val assertPredicate = s.Equals(executionPathMatchExpression, shadowExecutionPathMatchExpression)
+
+                s.Assert(
+                    assertPredicate,
+                    None,
+                    newMatchExpr
+                )
+
             case _ =>
                 expression
 
