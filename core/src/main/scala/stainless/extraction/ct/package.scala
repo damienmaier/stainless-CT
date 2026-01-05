@@ -66,7 +66,7 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
             case _ =>
                 expression
 
-    override protected def extractFunction(context: TransformerContext, function: s.FunDef): (t.FunDef, Unit) = {
+    private def instrumentFunction(function: s.FunDef): s.FunDef =
         val secretArgumentId = function.params.find(_.id.name == "secret").get.id
         val publicArgumentId = function.params.find(_.id.name == "public").get.id
 
@@ -91,6 +91,16 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
             fullBody = lockstepBodyWithShadowPublic
         )
 
-        (instrumentedFunction, ())
+        instrumentedFunction
+
+
+    override protected def extractFunction(context: TransformerContext, function: s.FunDef): (t.FunDef, Unit) = {
+        val resultFunction =
+            if function.flags.exists(_.name == "ctverify") then
+                instrumentFunction(function)
+            else
+                function
+
+        (resultFunction, ())
     }
 }

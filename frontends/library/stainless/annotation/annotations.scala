@@ -113,3 +113,6 @@ class anyHeapRef extends Annotation
 
 @ignore
 class refEq extends Annotation
+
+@ignore
+class ctverify extends Annotation
