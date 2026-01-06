@@ -21,6 +21,16 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
     private def freshProductValDef(originalValDef: s.ValDef): s.ValDef =
         t.ValDef.fresh(originalValDef.id.name, productType(originalValDef.tpe))
 
+    private def firstExpression(expression: s.Expr): s.Expr =
+        expression match
+            case s.Tuple(Seq(first, _)) => first
+            case _ => s.TupleSelect(expression, 1)
+
+    private def secondExpression(expression: s.Expr): s.Expr =
+        expression match
+            case s.Tuple(Seq(_, second)) => second
+            case _ => s.TupleSelect(expression, 2)
+
 
     private def lockstepExpression(expression: s.Expr, idToProductValDef: Map[Identifier, s.ValDef]): s.Expr =
         expression match
@@ -36,6 +46,15 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
                 val productBody = lockstepExpression(body, idToProductValDef + (valDef.id -> productValDef))
 
                 s.Let(productValDef, productValue, productBody)
+
+            case s.Plus(lhs, rhs) =>
+                val lockstepLhs = lockstepExpression(lhs, idToProductValDef)
+                val lockstepRhs = lockstepExpression(rhs, idToProductValDef)
+
+                val additionFirst = s.Plus(firstExpression(lockstepLhs), firstExpression(lockstepRhs))
+                val additionSecond = s.Plus(secondExpression(lockstepLhs), secondExpression(lockstepRhs))
+
+                s.Tuple(Seq(additionFirst, additionSecond))
 
             case s.IfExpr(condition, thenBranch, elseBranch) =>
                 val lockstepCondition = lockstepExpression(condition, idToProductValDef)
