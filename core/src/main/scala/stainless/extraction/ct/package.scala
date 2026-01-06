@@ -40,7 +40,8 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
 
         s.Tuple(Seq(operationFirst, operationSecond))
 
-    private def lockstepBinaryOperation(lhs: s.Expr, rhs: s.Expr, operation: (s.Expr, s.Expr) => s.Expr)
+    private def lockstepBinaryOperation(lhs: s.Expr, rhs: s.Expr, operation: (s.Expr, s.Expr) => s.Expr,
+                                        checkShortCircuit: Boolean = false)
                                        (using idToProductValDef: Map[Identifier, s.ValDef]): s.Expr =
         val lockstepLhs = lockstepExpression(lhs)
         val lockstepRhs = lockstepExpression(rhs)
@@ -48,7 +49,17 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
         val operationFirst = operation(firstExpression(lockstepLhs), firstExpression(lockstepRhs))
         val operationSecond = operation(secondExpression(lockstepLhs), secondExpression(lockstepRhs))
 
-        s.Tuple(Seq(operationFirst, operationSecond))
+        val result = s.Tuple(Seq(operationFirst, operationSecond))
+
+        if checkShortCircuit then
+            s.Assert(
+                s.Equals(firstExpression(lockstepLhs), secondExpression(lockstepLhs)),
+                Some("Short-circuiting should not depend on the secret"),
+                result
+            )
+        else
+            result
+
 
     private def copyPattern(pattern: s.Pattern, binderPostfix: String): s.Pattern =
 
@@ -131,13 +142,19 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
                 lockstepBinaryOperation(lhs, rhs, s.Equals.apply)
 
             case s.And(Seq(lhs, rhs)) =>
-                lockstepBinaryOperation(lhs, rhs, s.And.apply)
+                lockstepBinaryOperation(lhs, rhs, s.And.apply, true)
 
             case s.Or(Seq(lhs, rhs)) =>
-                lockstepBinaryOperation(lhs, rhs, s.Or.apply)
+                lockstepBinaryOperation(lhs, rhs, s.Or.apply, true)
 
             case s.Implies(lhs, rhs) =>
-                lockstepBinaryOperation(lhs, rhs, s.Implies.apply)
+                lockstepBinaryOperation(lhs, rhs, s.Implies.apply, true)
+
+            case s.BoolBitwiseAnd(lhs, rhs) =>
+                lockstepBinaryOperation(lhs, rhs, s.BoolBitwiseAnd.apply)
+
+            case s.BoolBitwiseOr(lhs, rhs) =>
+                lockstepBinaryOperation(lhs, rhs, s.BoolBitwiseOr.apply)
 
             case s.Not(operand) =>
                 lockstepUnaryOperation(operand, s.Not.apply)
