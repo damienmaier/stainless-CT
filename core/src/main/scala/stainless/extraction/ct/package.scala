@@ -104,7 +104,15 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
                 val productValue = lockstepExpression(value)
                 val productBody = lockstepExpression(body)(using idToProductValDef + (valDef.id -> productValDef))
 
-                s.Let(productValDef, productValue, productBody)
+                val resultLetExpression = s.Let(productValDef, productValue, productBody)
+
+                if valDef.flags.exists(_.name == "public") then
+                    s.Require(
+                        s.Equals(firstExpression(productValue), secondExpression(productValue)),
+                        resultLetExpression
+                    )
+                else
+                    resultLetExpression
 
             case s.Equals(lhs, rhs) =>
                 lockstepBinaryOperation(lhs, rhs, s.Equals.apply)

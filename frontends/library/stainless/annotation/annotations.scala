@@ -119,3 +119,6 @@ class ctverify extends Annotation
 
 @ignore
 class secret extends Annotation
+
+@ignore
+class public extends Annotation
