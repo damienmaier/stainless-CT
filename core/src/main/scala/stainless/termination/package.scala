@@ -9,11 +9,11 @@ package object termination {
   type Trees = extraction.Trees
   val trees = extraction.trees
 
-  object optInferMeasures extends inox.FlagOptionDef("infer-measures", true)
+  object optInferMeasures extends inox.FlagOptionDef("infer-measures", false)
 
   object optCheckMeasures extends inox.OptionDef[YesNoOnly] {
     val name     = "check-measures"
-    val default  = YesNoOnly.Yes
+    val default  = YesNoOnly.No
     val parser   = YesNoOnly.parse(_)
     val usageRhs = "yes | no | only"
   }
