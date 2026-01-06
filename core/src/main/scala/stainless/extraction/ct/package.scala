@@ -21,7 +21,16 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
 
     private def lockstepExpression(expression: s.Expr, idToProductValDef: Map[Identifier, s.ValDef]): s.Expr =
         expression match
-            case s.Variable(id, tpe, flags) => idToProductValDef(id).toVariable
+            case s.Variable(id, tpe, flags) =>
+                idToProductValDef(id).toVariable
+
+            case literal: s.Literal[_] =>
+                s.Tuple(Seq(literal, literal))
+
+
+
+
+
 
 
     private def instrumentFunction(function: s.FunDef): s.FunDef =
