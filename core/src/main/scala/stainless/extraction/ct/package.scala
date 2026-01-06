@@ -27,6 +27,13 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
             case literal: s.Literal[_] =>
                 s.Tuple(Seq(literal, literal))
 
+            case s.Let(valDef, value, body) =>
+                val productValDef = t.ValDef.fresh(valDef.id.name, productType(valDef.tpe))
+                val productValue = lockstepExpression(value, idToProductValDef)
+                val productBody = lockstepExpression(body, idToProductValDef + (valDef.id -> productValDef))
+
+                s.Let(productValDef, productValue, productBody)
+
             case s.IfExpr(condition, thenBranch, elseBranch) =>
                 val lockstepCondition = lockstepExpression(condition, idToProductValDef)
                 val lockstepConditionFirst = s.TupleSelect(lockstepCondition, 1)
