@@ -194,6 +194,33 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
                     )
                 )
 
+            case s.FunctionInvocation(id, tps, arguments) =>
+                s.FunctionInvocation(id, tps, arguments.map(lockstepExpression))
+
+            case s.Require(predicate, body) =>
+                val lockstepPredicate = lockstepExpression(predicate)
+                s.Require(
+                    firstExpression(lockstepPredicate),
+                    s.Require(
+                        secondExpression(lockstepPredicate),
+                        lockstepExpression(body)
+                    )
+                )
+
+            case s.MethodInvocation(receiver, id, tps, arguments) =>
+                val lockstepReceiver = lockstepExpression(receiver)
+                val firstRecveiver = firstExpression(lockstepReceiver)
+                val secondReceiver = secondExpression(lockstepReceiver)
+
+                val lockstepArguments = arguments.map(lockstepExpression)
+                val firstArguments = lockstepArguments.map(firstExpression)
+                val secondArguments = lockstepArguments.map(secondExpression)
+
+                s.Tuple(Seq(
+                    s.MethodInvocation(firstRecveiver, id, tps, firstArguments),
+                    s.MethodInvocation(secondReceiver, id, tps, secondArguments)
+                ))
+
 
     private def instrumentFunction(function: s.FunDef): s.FunDef =
         val idToProductValDef = function.params.map(
