@@ -31,6 +31,25 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
             case s.Tuple(Seq(_, second)) => second
             case _ => s.TupleSelect(expression, 2)
 
+    private def lockstepUnaryOperation(operand: s.Expr, operation: s.Expr => s.Expr,
+                                       idToProductValDef: Map[Identifier, s.ValDef]): s.Expr =
+        val lockstepOperand = lockstepExpression(operand, idToProductValDef)
+
+        val operationFirst = operation(firstExpression(lockstepOperand))
+        val operationSecond = operation(secondExpression(lockstepOperand))
+
+        s.Tuple(Seq(operationFirst, operationSecond))
+
+    private def lockstepBinaryOperation(lhs: s.Expr, rhs: s.Expr, operation: (s.Expr, s.Expr) => s.Expr,
+                                        idToProductValDef: Map[Identifier, s.ValDef]): s.Expr =
+        val lockstepLhs = lockstepExpression(lhs, idToProductValDef)
+        val lockstepRhs = lockstepExpression(rhs, idToProductValDef)
+
+        val operationFirst = operation(firstExpression(lockstepLhs), firstExpression(lockstepRhs))
+        val operationSecond = operation(secondExpression(lockstepLhs), secondExpression(lockstepRhs))
+
+        s.Tuple(Seq(operationFirst, operationSecond))
+
 
     private def lockstepExpression(expression: s.Expr, idToProductValDef: Map[Identifier, s.ValDef]): s.Expr =
         expression match
@@ -47,14 +66,53 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
 
                 s.Let(productValDef, productValue, productBody)
 
+            case s.Equals(lhs, rhs) =>
+                lockstepBinaryOperation(lhs, rhs, s.Equals.apply, idToProductValDef)
+
+            case s.And(Seq(lhs, rhs)) =>
+                lockstepBinaryOperation(lhs, rhs, s.And.apply, idToProductValDef)
+
+            case s.Or(Seq(lhs, rhs)) =>
+                lockstepBinaryOperation(lhs, rhs, s.Or.apply, idToProductValDef)
+
+            case s.Implies(lhs, rhs) =>
+                lockstepBinaryOperation(lhs, rhs, s.Implies.apply, idToProductValDef)
+
+            case s.Not(operand) =>
+                lockstepUnaryOperation(operand, s.Not.apply, idToProductValDef)
+
             case s.Plus(lhs, rhs) =>
-                val lockstepLhs = lockstepExpression(lhs, idToProductValDef)
-                val lockstepRhs = lockstepExpression(rhs, idToProductValDef)
+                lockstepBinaryOperation(lhs, rhs, s.Plus.apply, idToProductValDef)
 
-                val additionFirst = s.Plus(firstExpression(lockstepLhs), firstExpression(lockstepRhs))
-                val additionSecond = s.Plus(secondExpression(lockstepLhs), secondExpression(lockstepRhs))
+            case s.Minus(lhs, rhs) =>
+                lockstepBinaryOperation(lhs, rhs, s.Minus.apply, idToProductValDef)
 
-                s.Tuple(Seq(additionFirst, additionSecond))
+            case s.UMinus(operand) =>
+                lockstepUnaryOperation(operand, s.UMinus.apply, idToProductValDef)
+
+            case s.Times(lhs, rhs) =>
+                lockstepBinaryOperation(lhs, rhs, s.Times.apply, idToProductValDef)
+
+            case s.Division(lhs, rhs) =>
+                lockstepBinaryOperation(lhs, rhs, s.Division.apply, idToProductValDef)
+
+            case s.Remainder(lhs, rhs) =>
+                lockstepBinaryOperation(lhs, rhs, s.Remainder.apply, idToProductValDef)
+
+            case s.Modulo(lhs, rhs) =>
+                lockstepBinaryOperation(lhs, rhs, s.Modulo.apply, idToProductValDef)
+
+            case s.LessThan(lhs, rhs) =>
+                lockstepBinaryOperation(lhs, rhs, s.LessThan.apply, idToProductValDef)
+
+            case s.GreaterThan(lhs, rhs) =>
+                lockstepBinaryOperation(lhs, rhs, s.GreaterThan.apply, idToProductValDef)
+
+            case s.GreaterEquals(lhs, rhs) =>
+                lockstepBinaryOperation(lhs, rhs, s.GreaterEquals.apply, idToProductValDef)
+
+            case s.LessEquals(lhs, rhs) =>
+                lockstepBinaryOperation(lhs, rhs, s.LessEquals.apply, idToProductValDef)
 
             case s.IfExpr(condition, thenBranch, elseBranch) =>
                 val lockstepCondition = lockstepExpression(condition, idToProductValDef)
