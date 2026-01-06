@@ -18,6 +18,9 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
     private def productType(originalType: s.Type): s.Type =
         t.TupleType(Seq(originalType, originalType))
 
+    private def freshProductValDef(originalValDef: s.ValDef): s.ValDef =
+        t.ValDef.fresh(originalValDef.id.name, productType(originalValDef.tpe))
+
 
     private def lockstepExpression(expression: s.Expr, idToProductValDef: Map[Identifier, s.ValDef]): s.Expr =
         expression match
@@ -28,7 +31,7 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
                 s.Tuple(Seq(literal, literal))
 
             case s.Let(valDef, value, body) =>
-                val productValDef = t.ValDef.fresh(valDef.id.name, productType(valDef.tpe))
+                val productValDef = freshProductValDef(valDef)
                 val productValue = lockstepExpression(value, idToProductValDef)
                 val productBody = lockstepExpression(body, idToProductValDef + (valDef.id -> productValDef))
 
@@ -54,29 +57,23 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
 
 
     private def instrumentFunction(function: s.FunDef): s.FunDef =
-        val originalSecretValDef = function.params.find(_.id.name == "secret").get
-        val originalPublicValDef = function.params.find(_.id.name == "public").get
+        val idToProductValDef = function.params.map(
+            paramValDef => paramValDef.id -> freshProductValDef(paramValDef)
+        ).toMap
 
-        val productSecretValDef = t.ValDef.fresh("secret", productType(originalSecretValDef.tpe))
-        val productPublicValDef = t.ValDef.fresh("public", productType(originalPublicValDef.tpe))
+        val lockstepBody = lockstepExpression(function.fullBody, idToProductValDef)
 
-        val idToProductId = Map(
-            originalSecretValDef.id -> productSecretValDef,
-            originalPublicValDef.id -> productPublicValDef
-        )
-
-        val lockstepBody = lockstepExpression(function.fullBody, idToProductId)
-
-        val originalPublicVariable = s.Variable(originalPublicValDef.id, originalPublicValDef.tpe, Seq.empty)
-        val lockstepBodyWithProductPublicInitialization = s.Let(
-            productPublicValDef,
-            s.Tuple(Seq(originalPublicVariable, originalPublicVariable)),
+        val publicVariable = idToProductValDef.values.find(_.id.name == "public").get.toVariable
+        val publicVariableFirst = s.TupleSelect(publicVariable, 1)
+        val publicVariableSecond = s.TupleSelect(publicVariable, 2)
+        val lockstepBodyWithPublicEqualRequire = s.Require(
+            s.Equals(publicVariableFirst, publicVariableSecond),
             lockstepBody
         )
 
         val instrumentedFunction = function.copy(
-            params = Seq(productSecretValDef, originalPublicValDef),
-            fullBody = lockstepBodyWithProductPublicInitialization,
+            params = idToProductValDef.values.toSeq,
+            fullBody = lockstepBodyWithPublicEqualRequire,
             returnType = productType(function.returnType)
         )
 
