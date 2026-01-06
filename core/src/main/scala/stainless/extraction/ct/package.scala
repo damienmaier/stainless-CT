@@ -19,8 +19,10 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
         t.TupleType(Seq(originalType, originalType))
 
 
-    private def lockstepExpression(expression: s.Expr, idToShadowId: Map[Identifier, Identifier]): s.Expr =
-        expression
+    private def lockstepExpression(expression: s.Expr, idToProductValDef: Map[Identifier, s.ValDef]): s.Expr =
+        expression match
+            case s.Variable(id, tpe, flags) => idToProductValDef(id).toVariable
+
 
     private def instrumentFunction(function: s.FunDef): s.FunDef =
         val originalSecretValDef = function.params.find(_.id.name == "secret").get
@@ -30,8 +32,8 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
         val productPublicValDef = t.ValDef.fresh("public", productType(originalPublicValDef.tpe))
 
         val idToProductId = Map(
-            originalSecretValDef.id -> productSecretValDef.id,
-            originalPublicValDef.id -> productPublicValDef.id
+            originalSecretValDef.id -> productSecretValDef,
+            originalPublicValDef.id -> productPublicValDef
         )
 
         val lockstepBody = lockstepExpression(function.fullBody, idToProductId)
