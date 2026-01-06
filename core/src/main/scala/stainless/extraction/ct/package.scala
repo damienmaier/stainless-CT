@@ -154,14 +154,14 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
             case s.LessEquals(lhs, rhs) =>
                 lockstepBinaryOperation(lhs, rhs, s.LessEquals.apply)
 
-            case s.IfExpr(condition, thenBranch, elseBranch) =>
+            case ifExpr @ s.IfExpr(condition, thenBranch, elseBranch) =>
                 val lockstepCondition = lockstepExpression(condition)
                 val lockstepConditionFirst = firstExpression(lockstepCondition)
                 val lockstepConditionSecond = secondExpression(lockstepCondition)
 
                 s.Assert(
-                    s.Equals(lockstepConditionFirst, lockstepConditionSecond),
-                    None,
+                    s.Equals(lockstepConditionFirst, lockstepConditionSecond).copiedFrom(ifExpr),
+                    Some("The if condition should not depend on the secret"),
                     s.IfExpr(
                         lockstepConditionFirst,
                         lockstepExpression(thenBranch),
@@ -169,7 +169,7 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
                     )
                 )
 
-            case s.MatchExpr(scrutinee, matchCases) =>
+            case matchExpr @ s.MatchExpr(scrutinee, matchCases) =>
 
                 val executionPathMatchCases = matchCases.zipWithIndex.map:
                     (matchCase, pathIndex) => matchCase.copy(rhs = s.IntegerLiteral(pathIndex))
@@ -186,8 +186,9 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
                 )
 
                 s.Assert(
-                    s.Equals(executionPathMatchExpressionFirst, executionPathMatchExpressionSecond),
-                    None,
+                    s.Equals(executionPathMatchExpressionFirst, executionPathMatchExpressionSecond)
+                        .copiedFrom(matchExpr),
+                    Some("The match case condition should not depend on the secret"),
                     s.MatchExpr(
                         lockstepScrutinee,
                         matchCases.map(lockstepMatchCase)
