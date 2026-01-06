@@ -116,8 +116,8 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
 
             case s.IfExpr(condition, thenBranch, elseBranch) =>
                 val lockstepCondition = lockstepExpression(condition, idToProductValDef)
-                val lockstepConditionFirst = s.TupleSelect(lockstepCondition, 1)
-                val lockstepConditionSecond = s.TupleSelect(lockstepCondition, 2)
+                val lockstepConditionFirst = firstExpression(lockstepCondition)
+                val lockstepConditionSecond = secondExpression(lockstepCondition)
 
                 s.Assert(
                     s.Equals(lockstepConditionFirst, lockstepConditionSecond),
@@ -141,8 +141,8 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
         val lockstepBody = lockstepExpression(function.fullBody, idToProductValDef)
 
         val publicVariable = idToProductValDef.values.find(_.id.name == "public").get.toVariable
-        val publicVariableFirst = s.TupleSelect(publicVariable, 1)
-        val publicVariableSecond = s.TupleSelect(publicVariable, 2)
+        val publicVariableFirst = firstExpression(publicVariable)
+        val publicVariableSecond = secondExpression(publicVariable)
         val lockstepBodyWithPublicEqualRequire = s.Require(
             s.Equals(publicVariableFirst, publicVariableSecond),
             lockstepBody
