@@ -73,6 +73,8 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
                 s.ClassPattern(freshBinder(binder), tpe, subPatterns.map(copyPattern(_, binderPostfix)))
             case s.TuplePattern(binder, subPatterns) =>
                 s.TuplePattern(freshBinder(binder), subPatterns.map(copyPattern(_, binderPostfix)))
+            case s.LiteralPattern(binder, literal) =>
+                s.LiteralPattern(freshBinder(binder), literal)
 
     private def lockstepMatchCase(matchCase: s.MatchCase)(using idToProductValDef: Map[Identifier, s.ValDef]): s.MatchCase =
         val s.MatchCase(pattern, _, expression) = matchCase
