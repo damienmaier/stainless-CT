@@ -7,9 +7,7 @@ def checkPassword(@secret correctPassword: List[Char], attemptPassword: List[Cha
 
   (correctPassword, attemptPassword) match
     case (Cons(correctChar, correctRest), Cons(attemptChar, attemptRest)) =>
-      val currentIsCorrect = correctChar == attemptChar 
-      val restIsCorrect = checkPassword(correctRest, attemptRest)
-      currentIsCorrect && restIsCorrect
+      (correctChar == attemptChar) & checkPassword(correctRest, attemptRest)
 
     case (Nil(), Nil()) =>
       true
