@@ -61,6 +61,34 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
             case s.ClassPattern(binder, tpe, subPatterns) =>
                 s.ClassPattern(freshBinder(binder), tpe, subPatterns.map(copyPattern(_, binderPostfix)))
 
+    private def lockstepMatchCase(matchCase: s.MatchCase)(using idToProductValDef: Map[Identifier, s.ValDef]): s.MatchCase =
+        val s.MatchCase(pattern, _, expression) = matchCase
+        val patternFirst = copyPattern(pattern, "_first")
+        val patternSecond = copyPattern(pattern, "_second")
+
+        val newIdToProductValDef = (
+            for originalValDef <- pattern.binders
+                yield originalValDef.id -> freshProductValDef(originalValDef)
+            ).toMap
+
+        val lockstepMatchCaseExpression =
+            lockstepExpression(expression)(using idToProductValDef ++ newIdToProductValDef)
+
+        val expressionWithDefs =
+            newIdToProductValDef.values.zip(patternFirst.binders.zip(patternSecond.binders))
+                .foldLeft(lockstepMatchCaseExpression):
+                    case (currentExpression, (productValDef, (firstValDef, secondValDef))) =>
+                        s.Let(
+                            productValDef,
+                            s.Tuple(Seq(firstValDef.toVariable, secondValDef.toVariable)),
+                            currentExpression
+                        )
+
+        s.MatchCase(
+            s.TuplePattern(None, Seq(patternFirst, patternSecond)),
+            None,
+            expressionWithDefs
+        )
 
 
     private def lockstepExpression(expression: s.Expr)(using idToProductValDef: Map[Identifier, s.ValDef]): s.Expr =
@@ -143,38 +171,8 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
 
             case s.MatchExpr(scrutinee, matchCases) =>
 
-                def productCase(matchCase: s.MatchCase): s.MatchCase =
-                    val s.MatchCase(pattern, _, expression) = matchCase
-                    val patternFirst = copyPattern(pattern, "_first")
-                    val patternSecond = copyPattern(pattern, "_second")
-
-                    val newIdToProductValDef = (
-                        for originalValDef <- pattern.binders
-                        yield originalValDef.id -> freshProductValDef(originalValDef)
-                    ).toMap
-
-                    val lockstepMatchCaseExpression =
-                        lockstepExpression(expression)(using idToProductValDef ++ newIdToProductValDef)
-
-                    val expressionWithDefs =
-                        newIdToProductValDef.values.zip(patternFirst.binders.zip(patternSecond.binders))
-                            .foldLeft(lockstepMatchCaseExpression):
-                                case (currentExpression, (productValDef, (firstValDef, secondValDef))) =>
-                                    s.Let(
-                                        productValDef,
-                                        s.Tuple(Seq(firstValDef.toVariable, secondValDef.toVariable)),
-                                        currentExpression
-                                    )
-
-                    s.MatchCase(
-                        s.TuplePattern(None, Seq(patternFirst, patternSecond)),
-                        None,
-                        expressionWithDefs
-                    )
-
-                def buildExecutionPathCase(originalCase: s.MatchCase, pathIndex: Int): s.MatchCase =
-                    originalCase.copy(rhs = s.IntegerLiteral(pathIndex))
-                val executionPathMatchCases = matchCases.zipWithIndex.map(buildExecutionPathCase)
+                val executionPathMatchCases = matchCases.zipWithIndex.map:
+                    (matchCase, pathIndex) => matchCase.copy(rhs = s.IntegerLiteral(pathIndex))
 
                 val lockstepScrutinee = lockstepExpression(scrutinee)
 
@@ -192,7 +190,7 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
                     None,
                     s.MatchExpr(
                         lockstepScrutinee,
-                        matchCases.map(productCase)
+                        matchCases.map(lockstepMatchCase)
                     )
                 )
 
