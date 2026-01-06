@@ -195,9 +195,6 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
                 )
 
 
-
-
-
     private def instrumentFunction(function: s.FunDef): s.FunDef =
         val idToProductValDef = function.params.map(
             paramValDef => paramValDef.id -> freshProductValDef(paramValDef)
@@ -205,21 +202,23 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
 
         val lockstepBody = lockstepExpression(function.fullBody)(using idToProductValDef)
 
-        val publicVariable = idToProductValDef.values.find(_.id.name == "public").get.toVariable
-        val publicVariableFirst = firstExpression(publicVariable)
-        val publicVariableSecond = secondExpression(publicVariable)
-        val lockstepBodyWithPublicEqualRequire = s.Require(
-            s.Equals(publicVariableFirst, publicVariableSecond),
-            lockstepBody
-        )
+        val publicVariableValDefs = function.params.filterNot(_.flags.exists(_.name == "secret"))
+        val lockstepBodyWithPublicEqualRequire = publicVariableValDefs.foldLeft(lockstepBody):
+            (currentBody, publicValDef) =>
+                val publicVariable = idToProductValDef(publicValDef.id).toVariable
+                val publicVariableFirst = firstExpression(publicVariable)
+                val publicVariableSecond = secondExpression(publicVariable)
+                s.Require(
+                    s.Equals(publicVariableFirst, publicVariableSecond),
+                    currentBody
+                )
 
-        val instrumentedFunction = function.copy(
+        function.copy(
             params = idToProductValDef.values.toSeq,
             fullBody = lockstepBodyWithPublicEqualRequire,
             returnType = productType(function.returnType)
         )
 
-        instrumentedFunction
 
 
     override protected def extractFunction(context: TransformerContext, function: s.FunDef): (t.FunDef, Unit) = {

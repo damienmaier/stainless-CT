@@ -116,3 +116,6 @@ class refEq extends Annotation
 
 @ignore
 class ctverify extends Annotation
+
+@ignore
+class secret extends Annotation
