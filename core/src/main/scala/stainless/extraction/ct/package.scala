@@ -60,6 +60,8 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
                 s.WildcardPattern(freshBinder(binder))
             case s.ClassPattern(binder, tpe, subPatterns) =>
                 s.ClassPattern(freshBinder(binder), tpe, subPatterns.map(copyPattern(_, binderPostfix)))
+            case s.TuplePattern(binder, subPatterns) =>
+                s.TuplePattern(freshBinder(binder), subPatterns.map(copyPattern(_, binderPostfix)))
 
     private def lockstepMatchCase(matchCase: s.MatchCase)(using idToProductValDef: Map[Identifier, s.ValDef]): s.MatchCase =
         val s.MatchCase(pattern, _, expression) = matchCase
@@ -113,6 +115,17 @@ class Instrumentation(override val s: xlang.trees.type, override val t: xlang.tr
                     )
                 else
                     resultLetExpression
+
+
+            case s.Tuple(Seq(leftExpression, rightExpression)) =>
+                val lockstepLeft = lockstepExpression(leftExpression)
+                val lockstepRight = lockstepExpression(rightExpression)
+
+                val lockstepFirst = s.Tuple(Seq(firstExpression(lockstepLeft), firstExpression(lockstepRight)))
+                val lockstepSecond = s.Tuple(Seq(secondExpression(lockstepLeft), secondExpression(lockstepRight)))
+
+                s.Tuple(Seq(lockstepFirst, lockstepSecond))
+
 
             case s.Equals(lhs, rhs) =>
                 lockstepBinaryOperation(lhs, rhs, s.Equals.apply)
