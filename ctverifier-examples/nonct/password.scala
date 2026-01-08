@@ -2,13 +2,10 @@ import stainless.annotation._
 import stainless.collection._
 
 @ctverify
-def checkPassword(@secret correctPassword: List[Char], attemptPassword: List[Char]): Boolean =
-  (correctPassword, attemptPassword) match
-    case (Cons(correctChar, correctRest), Cons(attemptChar, attemptRest)) =>
-      if correctChar == attemptChar then
-        checkPassword(correctRest, attemptRest)
-      else
-        false
+def checkPassword(@secret password: List[Char], candidate: List[Char]): Boolean =
+  (password, candidate) match
+    case (Cons(x, xs), Cons(y, ys)) =>
+      x == y && checkPassword(xs, ys)
 
     case (Nil(), Nil()) =>
       true

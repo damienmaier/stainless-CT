@@ -2,16 +2,12 @@ import stainless.annotation._
 import stainless.collection._
 
 @ctverify
-def checkPassword(@secret correctPassword: List[Char], attemptPassword: List[Char]): Boolean =
-  @public val passwordSize = correctPassword.size
+def foo(@secret password: List[Int], candidate: List[Int], i: BigInt = 0): Boolean =
+  require(password.size == 100)
+  require(candidate.size == 100)
+  require(0 <= i && i <= 100)
 
-  (correctPassword, attemptPassword) match
-    case (Cons(correctChar, correctRest), Cons(attemptChar, attemptRest)) =>
-      (correctChar == attemptChar) & checkPassword(correctRest, attemptRest)
+  if i == 100 then true else
+    (password(i) == candidate(i)) & foo(password, candidate, i+1)
 
-    case (Nil(), Nil()) =>
-      true
-
-    case _ =>
-      false
 
