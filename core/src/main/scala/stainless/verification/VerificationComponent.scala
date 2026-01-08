@@ -16,7 +16,7 @@ import stainless.termination.MeasureInference
  *
  * Add assertions for integer overflow checking and other unexpected behaviour (e.g. x << 65).
  */
-object optStrictArithmetic extends inox.FlagOptionDef("strict-arithmetic", true)
+object optStrictArithmetic extends inox.FlagOptionDef("strict-arithmetic", false)
 
 /**
  * Verify program using Coq
