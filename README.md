@@ -39,7 +39,11 @@ def squareAndMultiply(base: BigInt, @secret exponentBits: List[BigInt], modulus:
             squareAndMultiply(base, rest, modulus, nextAcc)
 ```
 
-Then run
+In this function, the only conditional branching is the pattern matching statement.
+The execution path after the pattern matching only depends on the size of the secret input `exponentBits`, not on its content.
+As the size of `exponentBits` is made public via the annotated variable `exponentSize`, the execution path of this function does not depend on secret data, and thus the function is constant time.
+
+Run:
 
 ```stainless example.scala```
 
@@ -51,13 +55,16 @@ Various examples of constant time and non constant time functions are provied in
 
 When provided with a non constant time function, Stainless automatically identifies the source code lines where a conditional branch depends on secret data, and gives a counterexample.
 
-For example, running
+For example, consider the square and multiply implementation given in [`ctverifier-examples/nonct/square-and-multiply.scala`](ctverifier-examples/nonct/square-and-multiply.scala).
+This function contains two CT violations : the pattern matching depends on the size of the secret input (in this function, the size of the secret input is not declared as public), and the if statement depends on the content of the secret input.
+
+Running:
 
 ```
 stainless ctverifier-examples/nonct/square-and-multiply.scala
 ```
 
-gives
+gives:
 
 ```
 [Warning ]  - Result for 'body assertion: The match case condition should not depend on the secret' VC for squareAndMultiply @7:5:
@@ -79,6 +86,10 @@ gives
 [Warning ]   exponentBits: (List[BigInt], List[BigInt]) -> (Cons[BigInt](BigInt("1"), Nil[BigInt]()), Cons[BigInt](BigInt("3"), Nil[BigInt]()))
 [Warning ]   base: (BigInt, BigInt)                     -> (BigInt("2"), BigInt("2"))
 ```
+
+For the first CT violation, Stainless gives as counterexample two different secret inputs `exponentBits` of different sizes.
+
+For the second CT violation, Stainless gives as counterexample two different secret inputs `exponentBits` with different content.
 
 ## Lockstep product program transformation
 
