@@ -15,6 +15,7 @@ See the [Stainless installation instructions](https://epfl-lara.github.io/stainl
 
 Write the function to be analyzed in a Scala source file.
 The function should have the `@ctverify` annotation, and each secret argument should have the `@secret` annotation.
+Non annotated arguments are considered public.
 
 Additionally, any variable declaration in the function body that has a `@public` annotation will be considered public.
 This can be useful for instance to specify that the content of a list is secret, while allowing the execution path to depend on its size.
