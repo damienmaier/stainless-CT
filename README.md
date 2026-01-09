@@ -1,100 +1,170 @@
-# Stainless [![Release][release-img]][latest-release] [![Nightly Status](https://github.com/epfl-lara/stainless/actions/workflows/stainless-nightly.yml/badge.svg)](https://github.com/epfl-lara/stainless/actions/workflows/stainless-nightly.yml) [![Build Status](https://github.com/epfl-lara/stainless/actions/workflows/stainless-CI.yml/badge.svg?branch=main)](https://github.com/epfl-lara/stainless/actions/workflows/stainless-CI.yml/?branch=main) [![Gitter chat][gitter-img]][gitter-ref] [![Apache 2.0 License][license-img]][license-ref]
+# Stainless-CT
 
-Hosted at https://github.com/epfl-lara/stainless ; mirrored at https://gitlab.epfl.ch/lara/stainless . Check out also [Inox](https://github.com/epfl-lara/inox) and [Bolts](https://github.com/epfl-lara/bolts/).
+This is modified version of the Stainless verification framework, that enables automatic verification that a Scala function is constant time, i.e., that its execution path does not depend on secret data.
 
-Verification framework for a subset of the [Scala](http://scala-lang.org) programming language. See the [tutorial](https://epfl-lara.github.io/asplos2022tutorial/).
+## Build
 
-Please note that this repository uses `git submodules`, so you need to either:
+To build this project, clone the present repository with its submodules, then run
+```
+sbt Universal/stage
+```
 
-- clone it with the `--recursive` option, or
-- run `$ git submodule update --init --recursive` after cloning.
+See the [Stainless installation instructions](https://epfl-lara.github.io/stainless/installation.html#build-from-source) for more information.
 
-Please note that Stainless does not support Scala 2 frontend anymore, only Scala 3.5.0 and later. The latest release that  supports Scala 2.13 frontend is the [v0.9.8.7](https://github.com/epfl-lara/stainless/releases/tag/v0.9.8.7).
+## Usage
 
-## Quick start
+Write the function to be analyzed in a Scala source file.
+The function should have the `@ctverify` annotation, and each secret argument should have the `@secret` annotation.
 
-We test mostly on [Ubuntu](https://ubuntu.com/download); on [Windows](https://www.microsoft.com/eb-gb/software-download/windows10), you can get sufficient text-based Ubuntu environment by installing [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/install) (e.g. `wsl --install`, then `wsl --install -d ubuntu`). Ensure you have a [Java](https://openjdk.org/projects/jdk/17/) version ready (it can be headless); on Ubuntu `sudo apt install openjdk-17-jdk-headless` suffices.
+Additionally, any variable declaration in the function body that has a `@public` annotation will be considered public.
+This can be useful for instance to specify that the content of a list is secret, while allowing the execution path to depend on its size.
 
-Once ready, [download the latest `stainless-dotty-standalone` release](https://github.com/epfl-lara/stainless/releases) for your platform. Unzip the archive, and run Stainless through the `stainless` script. Stainless expects a list of space-separated Scala files to verify but also has other [Command-line Options](https://epfl-lara.github.io/stainless/options.html).
+For example, write the following code in a file `example.scala`
 
-To check if everything works, you may create a file named `HelloStainless.scala` next to the `stainless` script with the following content:
 ```scala
+import stainless.annotation._
 import stainless.collection._
-object HelloStainless {
-  def myTail(xs: List[BigInt]): BigInt = {
-    require(xs.nonEmpty)
-    xs match {
-      case Cons(h, _) => h
-      // Match provably exhaustive
-    }
+
+@ctverify
+def squareAndMultiply(base: BigInt, @secret exponentBits: List[BigInt], modulus: BigInt, @secret acc: BigInt = 1): BigInt =
+    require(modulus > 0)
+    @public val exponentSize = exponentBits.size
+    exponentBits match
+        case Nil() => acc
+        case Cons(bit, rest) =>
+            val squared = (acc * acc) % modulus
+            val multiplied = squared * base % modulus
+            val nextAcc = squared + (multiplied - squared) * bit
+            squareAndMultiply(base, rest, modulus, nextAcc)
+```
+
+Then run
+
+```stainless example.scala```
+
+to automatically verify that this function is constant time.
+
+Various examples of constant time and non constant time functions are provied in the dirs `ctverifier-examples/ct` and `ctverifier-examples/nonct` of this repo.
+
+### Feedback for non constant time functions
+
+When provided with a non constant time function, Stainless automatically identifies the source code lines where a conditional branch depends on secret data, and gives a counterexample.
+
+For example, running
+
+```
+stainless ctverifier-examples/nonct/square-and-multiply.scala
+```
+
+gives
+
+```
+[Warning ]  - Result for 'body assertion: The match case condition should not depend on the secret' VC for squareAndMultiply @7:5:
+[Warning ] ctverifier-examples/nonct/square-and-multiply.scala:7:5:  => INVALID
+               exponentBits match
+               ^^^^^^^^^^^^^^^^^^...
+[Warning ] Found counter-example:
+[Warning ]   modulus: (BigInt, BigInt)                  -> (BigInt("1"), BigInt("1"))
+[Warning ]   exponentBits: (List[BigInt], List[BigInt]) -> (Nil[BigInt](), Cons[BigInt](BigInt("3"), Nil[BigInt]()))
+[Warning ]   base: (BigInt, BigInt)                     -> (BigInt("2"), BigInt("2"))
+
+
+[Warning ]  - Result for 'body assertion: The if condition should not depend on the secret' VC for squareAndMultiply @12:17:
+[Warning ] ctverifier-examples/nonct/square-and-multiply.scala:12:17:  => INVALID
+                           if bit == 1 then
+                           ^^^^^^^^^^^^^^^^...
+[Warning ] Found counter-example:
+[Warning ]   modulus: (BigInt, BigInt)                  -> (BigInt("39"), BigInt("39"))
+[Warning ]   exponentBits: (List[BigInt], List[BigInt]) -> (Cons[BigInt](BigInt("1"), Nil[BigInt]()), Cons[BigInt](BigInt("3"), Nil[BigInt]()))
+[Warning ]   base: (BigInt, BigInt)                     -> (BigInt("2"), BigInt("2"))
+```
+
+## Lockstep product program transformation
+
+Internally, our implementation relies on a new phase in the Stainless pipeline, that translates the original function into a lockstep product function whose safety is equivalent to the CT security of the original function.
+
+To see the effect of this transformation, use the flags `--debug=trees --debug-phases=Lockstep`.
+
+For instance, running:
+
+```
+stainless --debug=trees --debug-phases=Lockstep ctverifier-examples/nonct/example.scala
+```
+
+Gives :
+
+```scala
+Symbols before Lockstep
+
+[...]
+
+@ctverify
+@final
+def foo((secret: Int) @secret, public: List[Char]): Boolean = {
+  val result: Int = if (public.contains('X')) {
+    secret
+  } else {
+    1
+  }
+  result match {
+    case 42 =>
+      true
+    case _ =>
+      false
   }
 }
+
+[...]
+
+Running phase Lockstep
+
+Symbols after Lockstep
+
+[...]
+
+@ctverify
+@final
+def foo(secret: (Int, Int), public: (List[Char], List[Char])): (Boolean, Boolean) = {
+    require(public._1 == public._2)
+    val result: (Int, Int) = {
+        assert(public._1.contains('X') == public._2.contains('X'), "The if condition should not depend on the secret")
+        if (public._1.contains('X')) {
+            secret
+        } else {
+            (1, 1)
+        }
+    }
+    assert(result._1 match {
+        case 42 =>
+            0
+        case _ =>
+            1
+    } == result._2 match {
+        case 42 =>
+            0
+        case _ =>
+            1
+    }, "The match case condition should not depend on the secret")
+    result match {
+        case (42, 42) =>
+            (true, true)
+        case (_, _) =>
+            (false, false)
+    }
+}
+
 ```
-and run `stainless HelloStainless.scala`.
-If all goes well, Stainless should report something along the lines:
-```log
-[  Info  ]   ┌───────────────────┐
-[  Info  ] ╔═╡ stainless summary ╞════════════════════════════════════════════════════════════════════╗
-[  Info  ] ║ └───────────────────┘                                                                    ║
-[  Info  ] ║ HelloStainless.scala:6:5:   myTail  body assertion: match exhaustiveness  nativez3   0,0 ║
-[  Info  ] ╟┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╢
-[  Info  ] ║ total: 1    valid: 1    (0 from cache) invalid: 0    unknown: 0    time:     0,0         ║
-[  Info  ] ╚══════════════════════════════════════════════════════════════════════════════════════════╝
-[  Info  ] Shutting down executor service.
-```
-If you see funny symbols instead of beautiful ASCII art, run Stainless with the `--no-colors` option for clean ASCII output with a standardized error message format.
 
-The release archive of Stainless only requires JDK 17. In particular, it needs
-neither a Scala compiler nor SBT. It is shipped with Z3 4.12.2+, cvc5 1.0.8+ and
-Princess (branch compiled for Scala 3). If the Z3 native API is not found, use
-the option `--solvers=smt-z3` to rely on the executable instead of API call to
-z3.
+## Stainless flags default values
 
-## Build and Installation Instructions
+As this version of Stainless focuses on verifying if functions are constant time, some other features of Stainless are disabled by default, but can be reenabled by passing the corresponding flags to the `stainless` command:
+- --infer-measures
+- --check-measures
+- --strict-arithmetic
 
-Please refer to the [installation documentation here](https://epfl-lara.github.io/stainless/installation.html).
+## Implementation
 
-## Further Documentation and Learning Materials
+The modifications applied to Stainless in this project mostly consist of
+- A new extraction phase implemented in `core/src/main/scala/stainless/extraction/ct/package.scala`
+- The addition of this new phase in the pipeline in `core/src/main/scala/stainless/extraction/package.scala`
 
-The main documentation for Stainless is hosted at
-https://epfl-lara.github.io/stainless/.
-
-To get started with using Stainless, see videos:
-  * [Stainless Introduction for 2nd year EPFL BSc students](https://mediaspace.epfl.ch/media/%5BCS214+W13+FP%5D+Formal+Verification+%282024-12-09%29/0_g7v3qvjp)
-  * [ASPLOS'22 tutorial](https://epfl-lara.github.io/asplos2022tutorial/)
-  * [FMCAD'21 tutorial](https://github.com/epfl-lara/fmcad2021tutorial/)
-  * [Formal Verification Course](https://mediaspace.epfl.ch/channel/CS-550+Formal+Verification/30542):
-    * [Getting Started](https://mediaspace.epfl.ch/media/01-02%2C+First+Steps+with+Stainless/0_tghlsgep/30542)
-    * Four part tutorial: [1](https://mediaspace.epfl.ch/playlist/dedicated/30542/0_hrhu33vg/0_h1bv5a7v), [2](https://mediaspace.epfl.ch/playlist/dedicated/30542/0_hrhu33vg/0_io2c8cnl), [3](https://mediaspace.epfl.ch/playlist/dedicated/30542/0_hrhu33vg/0_j7fgd1oc), [4](https://mediaspace.epfl.ch/playlist/dedicated/30542/0_hrhu33vg/0_4soh944h)
-    * [Assertions](https://mediaspace.epfl.ch/playlist/dedicated/30542/0_vw42tr2d/0_54yx91xi)
-    * [Unfolding](https://mediaspace.epfl.ch/playlist/dedicated/30542/0_vw42tr2d/0_4byxmv9i)
-    * [Dispenser Example](https://mediaspace.epfl.ch/playlist/dedicated/30542/0_hrhu33vg/0_omextd9i)
-  * [Keynote at Lambda Days'20](https://www.youtube.com/watch?v=dkO59PTcNxA)
-  * [Keynote at ScalaDays'17 Copenhagen](https://www.youtube.com/watch?v=d4VeFa0z_Lo)
-
- or see local [documentation](https://epfl-lara.github.io/stainless/) chapters, such as:
-  * [Introduction to Stainless](https://epfl-lara.github.io/stainless/intro.html)
-  * [Installation](https://epfl-lara.github.io/stainless/installation.html)
-  * [Getting Started](https://epfl-lara.github.io/stainless/gettingstarted.html)
-  * [Command-line Options](https://epfl-lara.github.io/stainless/options.html)
-  * [Mini Tutorial](https://epfl-lara.github.io/stainless/tutorial.html)
-
-There is also a [Stainless EPFL Page](https://stainless.epfl.ch) which hosts a mirror of the GitHub repository.
-
-## License
-
-Stainless is released under the Apache 2.0 license. See the [LICENSE](LICENSE) file for more information.
-
-## Relation to [Inox](https://github.com/epfl-lara/inox)
-
-Stainless relies on Inox to solve the various queries stemming from program verification.
-Inox supports model-complete queries in a feature-rich fragment that lets Stainless focus
-on program transformations and soundness of both contract and termination checking and uses its own reasoning steps, as well as invocations to solvers (theorem provers) [z3](https://github.com/Z3Prover/z3), [cvc5](https://cvc5.github.io/), and [Princess](http://www.philipp.ruemmer.org/princess.shtml).
-
-[latest-release]: https://github.com/epfl-lara/stainless/releases/latest
-[license-img]: https://img.shields.io/badge/license-Apache_2.0-blue.svg?color=134EA2
-[license-ref]: https://github.com/epfl-lara/stainless/blob/main/LICENSE
-[gitter-img]: https://img.shields.io/gitter/room/gitterHQ/gitter.svg?color=ed1965
-[gitter-ref]: https://gitter.im/epfl-lara/stainless
-[release-img]: https://img.shields.io/github/release-pre/epfl-lara/stainless.svg
-[tag-date-img]: https://img.shields.io/github/release-date-pre/epfl-lara/stainless.svg?style=popout
