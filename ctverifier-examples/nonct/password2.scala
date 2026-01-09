@@ -2,12 +2,12 @@ import stainless.annotation._
 import stainless.collection._
 
 @ctverify
-def foo(@secret password: List[Int], candidate: List[Int], i: BigInt = 0): Boolean =
-  require(password.size == 5)
-  require(candidate.size == 5)
-  require(0 <= i && i <= 5)
+def checkPassword(@secret password: List[Int], candidate: List[Int], i: BigInt = 0): Boolean =
+  require(password.size == 100)
+  require(candidate.size == 100)
+  require(0 <= i && i <= 100)
 
-  if i == 5 then true else
-    (password(i) == candidate(i)) && foo(password, candidate, i+1)
+  if i == 100 then true else
+    (password(i) == candidate(i)) && checkPassword(password, candidate, i+1)
 
 
